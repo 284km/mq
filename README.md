@@ -54,17 +54,18 @@ at a pinned commit, then `mere install` + `mere -c | clang` produces native
 2. ✅ **Path queries** ← latest: `.`, `.a.b`, `.items[0]`, `.[1].name` —
    a tiny recursive-descent query parser (ADT `sel = Field | Index`) over
    the parsed `Json.json`; absent paths give `null`.
-3. ✅ **Streams** ← latest: array/object iteration `.[]` and pipes
-   `.items[] | .id`. Evaluation is stream-based (`json -> json list`,
-   flat-mapped per selector); each result prints on its own line.
-4. ✅ **CSV input** ← latest: `mq --csv '<query>' <file.csv>` turns CSV
-   into a JSON array of objects (header row → keys) and queries it with the
-   same engine. Uses `contrib/csv` (proper quoted-field handling). Composing
+3. ✅ **Streams**: array/object iteration `.[]` and pipes `.items[] | .id`.
+   Evaluation is stream-based (`json -> json list`, flat-mapped per
+   selector); each result prints on its own line.
+4. ✅ **CSV input**: `mq --csv '<query>' <file.csv>` turns CSV into a JSON
+   array of objects (header row → keys) and queries it with the same
+   engine. Uses `contrib/csv` (proper quoted-field handling). Composing
    csv + json first broke the C backend's inner-fn lifting (PAIN P8) — now
    fixed upstream, so mq imports contrib/csv directly.
-5. **Distribution**: how a user gets the `mq` binary (build via `mere -c`
-   + clang; a release workflow / `mere install`-assisted build) — a
-   different story from mere-notes' `mere serve`.
+5. ✅ **Distribution** ← latest: prebuilt binaries (macOS arm64 / Linux
+   x86_64) on each `v*` tag + a `curl | sh` installer. CI builds the Mere
+   compiler from source at a pinned commit, then `mere install` +
+   `mere -c | clang`. Released as **v0.0.1**.
 
 ## Dependencies
 
