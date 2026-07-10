@@ -39,13 +39,15 @@ argv[1..] str list. Verified native: `mq apple banana` → `[apple, banana]`.
 So an argument-driven native CLI is possible now (`mq <query> <file>`,
 reading the file with the already-working `read_file`).
 
-**Still open:** (a) **stdin** — there's no read-all-stdin primitive; `jq`'s
-`echo … | mq …` UX needs one (a new `read_all` builtin across interp +
-backends, or looping `read_line` with an EOF sentinel). (b) **`exit n`** —
-the C backend has no case for it, and `exit`'s `'a` (bottom) result is
-awkward as a C expression; `mq` returns its code from `main` for now.
-LLVM still rejects `args` outright ("Phase 5.1 MVP"), so `mq` builds via
-the C backend only.
+**stdin fixed (mere v0.1.2):** a `read_stdin : unit -> str` builtin now
+reads all of stdin (interp + C backend), so `echo … | mq '.query'` works —
+`mq` falls back to `read_stdin ()` when given no file argument (`--csv`
+included). Verified native end-to-end through the release binary.
+
+**Still open:** **`exit n`** — the C backend has no case for it, and
+`exit`'s `'a` (bottom) result is awkward as a C expression; `mq` returns
+its code from `main` for now. LLVM still rejects `args` outright
+("Phase 5.1 MVP"), so `mq` builds via the C backend only.
 
 ## P2 🟢 C backend ignored shadowing of the `join` builtin (fixed upstream)
 
@@ -136,20 +138,26 @@ Wasm backend, so this is a 4-backend parity gap.
 backend (→ `strcmp == 0`, like the `==`-on-str path already does) or
 document `==` as the portable string-equality idiom.
 
-## P7 🟡 `>=` / `<=` don't typecheck on str (comparison ops default to int)
+## P7 🟢 `>=` / `<=` don't typecheck on str (fixed upstream in mere v0.1.3)
 
 Writing char-range tests as `c >= "0" && c <= "9"` failed: `type error:
-expected 'int', got 'str'` — the ordering operators are typed int-only, so
-`c` was forced to int and the str literal `"0"` clashed. (`==` / `!=` do
-work on str, and the C backend even has `strcmp`-based `<`/`<=`/`>`/`>=`
-for str operands — so the gap is in the typer, not codegen.)
+expected 'int', got 'str'` — the ordering operators were typed int-only, so
+`c` was forced to int and the str literal `"0"` clashed. (`==` / `!=` did
+work on str, and the C backend even had `strcmp`-based `<`/`<=`/`>`/`>=`
+for str operands — so the gap was in the typer, not codegen.)
 
-**Worked around:** classify characters via `ord c` (byte value) + int
-comparison instead.
+**Worked around (initially):** classified characters via `ord c` (byte
+value) + int comparison.
 
-**Signal (upstream):** let the typer accept `<`/`<=`/`>`/`>=` on str
-(lexicographic, backed by the existing strcmp paths), or document that
-string ordering must go through `ord` / a `str_cmp` helper.
+**Fixed upstream (mere v0.1.3):** the typer now accepts `<`/`<=`/`>`/`>=`
+on str, comparing lexicographically, across all four backends (interp / C /
+Wasm / LLVM — C and LLVM already lowered str comparison via `strcmp`). The
+`int` default for unresolved operands is preserved, so the fix is backward
+compatible. mq's char classes are now the direct
+`c >= "0" && c <= "9"` / `(c >= "a" && c <= "z") || …` form; the `ord`
+workaround is gone. (`ord` is still used in `scan_int` to turn a digit char
+into its numeric value — that's genuine char→int conversion, not a
+comparison workaround.)
 
 ## (M3) 🟢 positive: stream redesign hit no language friction
 

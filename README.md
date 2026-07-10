@@ -66,10 +66,15 @@ clang` produces native `mq` binaries (macOS arm64 / Linux x86_64) on each
    fixed upstream, so mq imports contrib/csv directly.
 5. ✅ **Distribution**: prebuilt binaries (macOS arm64 / Linux x86_64) on
    each `v*` tag + a `curl | sh` installer. CI installs a prebuilt `mere`
-   (v0.1.1+) then `mere install` + `mere -c | clang`. Released as **v0.0.1**.
-6. ✅ **stdin** ← latest: `echo '…' | mq '.query'` (and `--csv`) reads all
-   of stdin when no file argument is given — the usual jq pipeline. Needed
-   a `read_stdin` builtin, added upstream in mere v0.1.2.
+   (latest release) then `mere install` + `mere -c | clang`.
+6. ✅ **stdin**: `echo '…' | mq '.query'` (and `--csv`) reads all of stdin
+   when no file argument is given — the usual jq pipeline. Needed a
+   `read_stdin` builtin, added upstream in mere v0.1.2.
+7. ✅ **str ordering** ← latest: the query lexer's char classes
+   (`is_dig` / `is_id`) now compare single-char strings directly
+   (`c >= "0" && c <= "9"`) instead of routing through `ord`. Needed the
+   typer to accept `<`/`<=`/`>`/`>=` on str, fixed upstream in mere v0.1.3.
+   Released as **v0.0.3**.
 
 ## Dependencies
 
