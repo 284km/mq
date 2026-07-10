@@ -80,7 +80,12 @@ a type mismatch. So you can parse *or* serialise from contrib, not both.
 either put both in the same `module Json`, or have the writer `import` the
 parser's type instead of redeclaring it.
 
-## P4 🟡 Qualified module types (`Json.json`) can't appear in annotations
+## P4 🟢 Qualified module types (`Json.json`) can't appear in annotations (fixed upstream)
+
+**Fixed (mere `5eaa3d9`):** the type-annotation grammar now accepts
+`Module.t`; module-internal types are registered unqualified, so the
+parser drops the prefix and resolves the bare name.
+
 
 `let f = fn (v: Json.json) -> …` fails to parse: `expected ',' or ')' in
 param list` at the `.`. Type annotations don't accept a qualified
@@ -106,7 +111,11 @@ use"). So it wasn't usable as a library: the demo ran on every import.
 library-clean (a module-only file, like `xml.mere`). The parser is already
 covered by the compile-time bootstrap tests, so no coverage was lost.
 
-## P6 🟡 C backend lacks the `str_eq` function (only `==` on str)
+## P6 🟢 C backend lacks the `str_eq` function (only `==` on str) (fixed upstream)
+
+**Fixed (mere `5eaa3d9`):** added a curried `str_eq a b` case to the C
+backend → `strcmp(a, b) == 0`, matching the `==`-on-str path.
+
 
 `str_eq a b` compiled to an undeclared-identifier `clang` error: the C
 backend has no runtime `str_eq`, only the `==` operator on str-typed
@@ -177,7 +186,12 @@ now imports `contrib/csv` directly and gets real quoted-field / embedded-
 comma parsing (`"hello, world"` → one field). The fix is validated in the
 app.
 
-## P9 🟡 `str_of_int` emits `show_int()` without ensuring it's declared
+## P9 🟢 `str_of_int` emits `show_int()` without ensuring it's declared (fixed upstream)
+
+**Fixed (mere `5eaa3d9`):** `collect_show_types` now adds `int` when
+`str_of_int` is used, so the `show_int` definition is emitted even without
+a direct `show`.
+
 
 Compiling a program that uses `str_of_int` (e.g. inside `contrib/json`'s
 `parse_json`) but never uses `show` fails at `clang` with
