@@ -40,9 +40,10 @@ clang -O2 mq.c -o mq
 
 Distributing a Mere *app* is more involved than a normal binary: the build
 needs the Mere toolchain (`mere` + `mere install`) and a C compiler. The
-[release workflow](.github/workflows/release.yml) builds `mere` from source
-at a pinned commit, then `mere install` + `mere -c | clang` produces native
-`mq` binaries (macOS arm64 / Linux x86_64) on each `v*` tag.
+[release workflow](.github/workflows/release.yml) installs a prebuilt
+`mere` from its GitHub Release (v0.1.1+), then `mere install` + `mere -c |
+clang` produces native `mq` binaries (macOS arm64 / Linux x86_64) on each
+`v*` tag.
 
 ## Milestones
 

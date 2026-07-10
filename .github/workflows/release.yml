@@ -5,11 +5,10 @@ name: Release
 #
 # Distributing a Mere *app* is more involved than a normal binary: the
 # build needs the Mere toolchain (`mere` + `mere install` for deps) and a C
-# compiler. Here CI builds `mere` from source at a pinned commit, then
-# `mere install` fetches deps and `mere -c | clang` produces the native
-# binary. (Once `mere` cuts regular release binaries, this could instead
-# `curl | sh` its installer — faster, but needs a release that includes the
-# fixes this app depends on.)
+# compiler. CI installs a prebuilt `mere` from its GitHub Release (no OCaml
+# toolchain), then `mere install` fetches deps and `mere -c | clang`
+# produces the native binary. (Requires a `mere` release that includes the
+# fixes this app depends on — v0.1.1+.)
 
 on:
   push:
@@ -17,11 +16,6 @@ on:
 
 permissions:
   contents: write
-
-env:
-  # Mere compiler commit to build the app with. Keep in sync with the rev
-  # in mere.toml / mere.lock (the deps come from the same tree).
-  MERE_REV: "27fbfca26e49fec4681691321cf23aeadc346c86"
 
 jobs:
   create-release:
@@ -53,26 +47,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up OCaml
-        uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: "5.1"
-
-      - name: Build the Mere compiler
+      - name: Install the Mere compiler
         run: |
-          git clone https://github.com/merelang/mere mere-src
-          git -C mere-src checkout "${MERE_REV}"
-          (cd mere-src && opam install . --deps-only && opam exec -- dune build)
-          echo "MERE=$PWD/mere-src/_build/default/bin/mere.exe" >> "$GITHUB_ENV"
+          curl -fsSL https://raw.githubusercontent.com/merelang/mere/main/scripts/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install app dependencies
-        run: |
-          "$MERE" install
+        run: mere install
 
       - name: Compile to a native binary
         run: |
           mkdir -p dist
-          "$MERE" -c main.mere > mq.c
+          mere -c main.mere > mq.c
           clang -O2 mq.c -o "dist/${{ matrix.asset }}"
 
       - name: Upload to release
