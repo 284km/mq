@@ -5,5 +5,5 @@ version = "0.0.1"
 # mq compiles to a NATIVE binary via the C backend (mere -c | clang) —
 # no Node host, unlike the mere-notes web app. So no [host] section.
 [dependencies]
-json = { git = "https://github.com/merelang/mere", subdir = "contrib/json", rev = "39ae7b91121899f2c6cb752f884d52aaca46bc83" }
-csv  = { git = "https://github.com/merelang/mere", subdir = "contrib/csv",  rev = "39ae7b91121899f2c6cb752f884d52aaca46bc83" }
+json = { git = "https://github.com/merelang/mere", subdir = "contrib/json", rev = "0daf7a34801b714c97a96e87a603a4dd615bf24b" }
+csv  = { git = "https://github.com/merelang/mere", subdir = "contrib/csv",  rev = "0daf7a34801b714c97a96e87a603a4dd615bf24b" }

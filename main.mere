@@ -1,0 +1,52 @@
+// mq — a jq-like JSON query & transform CLI, compiled to a NATIVE binary
+// via the Mere C backend (mere -c | clang). Second dogfood app (see
+// PAIN.md). This milestone (M1): read a JSON file argument, parse it, and
+// print it back — the identity query `.`. A formatter, and proof that a
+// real argument-driven native CLI works end to end.
+//
+//   mq data.json          # parse + reprint
+//
+// Build:
+//   mere install
+//   mere -c main.mere > mq.c && clang mq.c -o mq
+//   ./mq data.json
+
+import "json/json.mere";
+
+let rec head_or = fn (xs: str list) -> fn (d: str) ->
+  match xs with
+  | Nil -> d
+  | Cons (x, _) -> x;
+
+// Serialize a Json.json compactly. (contrib/json/writer.mere has a
+// pretty-printer, but its `json` type is top-level while the parser's is
+// `Json.json` inside `module Json`, so they don't compose — see PAIN P3.
+// Hand-rolling the serializer over Json.json sidesteps that for now.)
+let rec ser = fn v ->
+  match v with
+  | Json.JNull -> "null"
+  | Json.JBool b -> if b then "true" else "false"
+  | Json.JNum n -> show n
+  | Json.JStr s -> "\"" ++ s ++ "\""
+  | Json.JArr xs -> "[" ++ ser_arr xs ++ "]"
+  | Json.JObj ps -> "\{" ++ ser_obj ps ++ "}"
+and ser_arr = fn xs ->
+  match xs with
+  | Nil -> ""
+  | Cons (x, Nil) -> ser x
+  | Cons (x, t) -> ser x ++ "," ++ ser_arr t
+and ser_obj = fn ps ->
+  match ps with
+  | Nil -> ""
+  | Cons ((k, v), Nil) -> "\"" ++ k ++ "\":" ++ ser v
+  | Cons ((k, v), t) -> "\"" ++ k ++ "\":" ++ ser v ++ "," ++ ser_obj t;
+
+let a = args () in
+let path = head_or a "" in
+if path == "" then
+  let _ = print "usage: mq <file.json>" in 1
+else
+  let src = read_file path in
+  let v = Json.parse_json src in
+  let _ = print (ser v) in
+  0
