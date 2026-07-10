@@ -1,0 +1,6 @@
+*.wat
+*.wasm
+*.c
+mq
+.mere_modules/
+.DS_Store
