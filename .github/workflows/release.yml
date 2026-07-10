@@ -1,0 +1,84 @@
+name: Release
+
+# Push a tag like `v0.0.1` to build native `mq` binaries for macOS (arm64)
+# and Linux (x86_64) and attach them to a GitHub Release.
+#
+# Distributing a Mere *app* is more involved than a normal binary: the
+# build needs the Mere toolchain (`mere` + `mere install` for deps) and a C
+# compiler. Here CI builds `mere` from source at a pinned commit, then
+# `mere install` fetches deps and `mere -c | clang` produces the native
+# binary. (Once `mere` cuts regular release binaries, this could instead
+# `curl | sh` its installer — faster, but needs a release that includes the
+# fixes this app depends on.)
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  # Mere compiler commit to build the app with. Keep in sync with the rev
+  # in mere.toml / mere.lock (the deps come from the same tree).
+  MERE_REV: "27fbfca26e49fec4681691321cf23aeadc346c86"
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Create (or reuse) the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRE=""
+          case "${GITHUB_REF_NAME}" in *-*) PRE="--prerelease" ;; esac
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes $PRE || true
+
+  binaries:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: mq-linux-x86_64
+          - os: macos-latest
+            asset: mq-macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.1"
+
+      - name: Build the Mere compiler
+        run: |
+          git clone https://github.com/merelang/mere mere-src
+          git -C mere-src checkout "${MERE_REV}"
+          (cd mere-src && opam install . --deps-only && opam exec -- dune build)
+          echo "MERE=$PWD/mere-src/_build/default/bin/mere.exe" >> "$GITHUB_ENV"
+
+      - name: Install app dependencies
+        run: |
+          "$MERE" install
+
+      - name: Compile to a native binary
+        run: |
+          mkdir -p dist
+          "$MERE" -c main.mere > mq.c
+          clang -O2 mq.c -o "dist/${{ matrix.asset }}"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            "dist/${{ matrix.asset }}" --clobber

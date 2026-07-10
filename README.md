@@ -14,10 +14,35 @@ codes, stderr), and **native binary distribution**. See [PAIN.md](./PAIN.md)
 ## Goal
 
 ```sh
-echo '{"user":{"name":"alice","age":30}}' | mq '.user.name'   # → "alice"
-mq '.items[]' data.json                                        # stream array
-mq --csv '.[] | .price' sales.csv                              # CSV in
+mq '.user.name' data.json          # → "alice"
+mq '.items[]' data.json            # stream array elements
+mq --csv '.[] | .name' people.csv  # query CSV as JSON
 ```
+
+## Install
+
+Prebuilt binary (no Mere toolchain or C compiler needed), once a release
+is published:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/284km/mq/main/scripts/install.sh | sh
+# installs to ~/.local/bin/mq (override with MQ_BINDIR)
+```
+
+Build from source — needs the [Mere](https://github.com/merelang/mere)
+compiler + a C compiler:
+
+```sh
+mere install                       # fetch json/csv into .mere_modules/
+mere -c main.mere > mq.c
+clang -O2 mq.c -o mq
+```
+
+Distributing a Mere *app* is more involved than a normal binary: the build
+needs the Mere toolchain (`mere` + `mere install`) and a C compiler. The
+[release workflow](.github/workflows/release.yml) builds `mere` from source
+at a pinned commit, then `mere install` + `mere -c | clang` produces native
+`mq` binaries (macOS arm64 / Linux x86_64) on each `v*` tag.
 
 ## Milestones
 
