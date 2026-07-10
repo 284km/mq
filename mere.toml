@@ -4,6 +4,7 @@ version = "0.0.1"
 
 # mq compiles to a NATIVE binary via the C backend (mere -c | clang) —
 # no Node host, unlike the mere-notes web app. So no [host] section.
+# (Only json: CSV is parsed inline with str_split — see main.mere / PAIN P8
+# on why contrib/csv isn't imported.)
 [dependencies]
-json = { git = "https://github.com/merelang/mere", subdir = "contrib/json", rev = "0daf7a34801b714c97a96e87a603a4dd615bf24b" }
-csv  = { git = "https://github.com/merelang/mere", subdir = "contrib/csv",  rev = "0daf7a34801b714c97a96e87a603a4dd615bf24b" }
+json = { git = "https://github.com/merelang/mere", subdir = "contrib/json", rev = "dd17b8a6db6ddfbd628bbf2537840b99dd4e1776" }

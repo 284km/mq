@@ -22,6 +22,13 @@
 
 import "json/json.mere";
 
+// NOTE: contrib/csv/parser.mere is NOT imported. Composing it with
+// json.mere breaks the C backend's inner-function lifting (a captured
+// `n` is dropped from a lifted loop — see PAIN P8). Until that's fixed
+// upstream, mq parses CSV with a small str_split-based reader below
+// (top-level recursion only, no inner-lifted loops). Trade-off: no
+// quoted-field / embedded-comma handling yet.
+
 type sel = Field of str | Index of int | Iter;
 
 let rec nth_or = fn xs -> fn i -> fn d ->
@@ -149,16 +156,59 @@ let rec print_each = fn xs ->
   | Nil -> ()
   | Cons (v, t) -> let _ = print (ser v) in print_each t;
 
+// --- CSV → JSON (--csv mode) --------------------------------------------
+// Rows are str-lists (Csv.parse_csv). The first row is the header; each
+// data row becomes a JObj mapping header → JStr cell. Result is a JArr,
+// so `.[] | .col` queries it like any JSON array.
+
+let rec zip_obj = fn hs -> fn cs ->
+  match hs with
+  | Nil -> Nil
+  | Cons (h, ht) ->
+    (match cs with
+     | Nil -> Cons ((h, Json.JStr ""), zip_obj ht Nil)
+     | Cons (c, ct) -> Cons ((h, Json.JStr c), zip_obj ht ct));
+
+// Drop a trailing empty row (a file ending in "\n" parses to a final [""]).
+let is_blank_row = fn r ->
+  match r with
+  | Nil -> true
+  | Cons (c, Nil) -> c == ""
+  | _ -> false;
+
+let rec rows_to_objs = fn hdr -> fn rows ->
+  match rows with
+  | Nil -> Nil
+  | Cons (r, t) ->
+    if is_blank_row r then rows_to_objs hdr t
+    else Cons (Json.JObj (zip_obj hdr r), rows_to_objs hdr t);
+
+let csv_to_json = fn rows ->
+  match rows with
+  | Nil -> Json.JArr Nil
+  | Cons (hdr, data) -> Json.JArr (rows_to_objs hdr data);
+
+// Minimal CSV reader: split on newlines, then each line on commas.
+// (No quoted-field support — see the note at the top / PAIN P8.)
+let rec split_lines = fn lines ->
+  match lines with
+  | Nil -> Nil
+  | Cons (l, t) -> Cons (str_split l ",", split_lines t);
+
+let csv_rows = fn src -> split_lines (str_split src "\n");
+
 // --- main ---------------------------------------------------------------
 
 let a = args () in
-let query = nth_or a 0 "" in
-let path  = nth_or a 1 "" in
+let is_csv = (nth_or a 0 "") == "--csv" in
+let query = if is_csv then nth_or a 1 "" else nth_or a 0 "" in
+let path  = if is_csv then nth_or a 2 "" else nth_or a 1 "" in
 if path == "" then
-  let _ = print "usage: mq '<query>' <file.json>" in 1
+  let _ = print "usage: mq [--csv] '<query>' <file>" in 1
 else
   let src = read_file path in
-  let v = Json.parse_json src in
+  let v = if is_csv then csv_to_json (csv_rows src)
+          else Json.parse_json src in
   let sels = parse_q query 0 (str_len query) in
   let _ = print_each (run (Cons (v, Nil)) sels) in
   0

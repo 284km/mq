@@ -47,14 +47,18 @@ awkward as a C expression; `mq` returns its code from `main` for now.
 LLVM still rejects `args` outright ("Phase 5.1 MVP"), so `mq` builds via
 the C backend only.
 
-## P2 🟡 C backend ignores shadowing of the concurrency `join` builtin
+## P2 🟢 C backend ignored shadowing of the `join` builtin (fixed upstream)
 
-Hit incidentally while testing `args`: a user-defined `let rec join = …`
-compiled to `pthread_join(t.tid, …)` — the C backend matched the name
-against the Q-012 thread-`join` builtin instead of the local binding, then
-failed to compile (`no member named 'tid' in struct list_str_node`).
-Builtin names used as ordinary identifiers aren't shadow-checked in the C
-backend's `App` dispatch. Worked around by renaming (`sjoin`).
+First hit while testing `args`, then for real in `contrib/csv` (a local
+`let rec join` string-joiner): a user-bound `join` compiled to
+`pthread_join(t.tid, …)`, failing with `no member named 'tid'`. The C
+backend's `App` dispatch matched `Ast.Var "join"` before its
+shadowing-aware cases.
+
+**Fixed (mere `dd17b8a`):** the `join` case now checks the same shadow set
+used elsewhere (`current_var_types` / `current_env_subst` / `inner_lifts` /
+`toplevel_fn_names`), so a shadowed `join` falls through to ordinary
+application. Regression test added.
 
 **Signal (upstream):** the C backend's `Ast.Var "<builtin>"` dispatch
 should first check whether the name is locally bound (shadowed) before
@@ -139,3 +143,41 @@ the `sel` ADT gained an `Iter` case, and `step` / `run` / `concat` are
 plain recursion. Like the CRDT in mere-notes, functional stream/AST code
 is where Mere is comfortable — the pains so far are all at the edges
 (native I/O, contrib packaging, str/Unicode), not in the core language.
+
+## P8 🔴 C backend breaks inner-fn lifting when two modules are composed
+
+The sharpest finding of M4. Importing **both** `json/json.mere` and
+`csv/parser.mere` and parsing a JSON array fails to compile: a lifted
+inner loop in json's array parser is emitted as
+`__lifted_loop_2(s, n, …)` but `n` (the string length it captured) is
+never declared — `use of undeclared identifier 'n'`. Isolated:
+
+- `import json` alone + parse a JSON array → compiles & runs (M1–M3).
+- `import json` **and** `import csv` + the same parse → C compile error.
+
+So it's not either module alone — composing two modules that each contain
+inner-lifted recursive loops corrupts the C backend's capture analysis
+(the `__lifted_loop_N` numbering / captured-var set isn't isolated per
+module). A real limitation on composing contrib libraries in native builds.
+
+**Worked around:** don't import `contrib/csv`; parse CSV inline with a
+tiny `str_split`-based reader (top-level recursion only, no inner-lifted
+loops), so only `json` is imported. (Cost: no quoted-field / embedded-comma
+handling.)
+
+**Signal (upstream):** inner-fn lifting must give each lifted function a
+program-unique name and carry its full captured-variable set regardless of
+how many modules are linked. This blocks composing inner-lift-heavy contrib
+modules on the C backend.
+
+## P9 🟡 `str_of_int` emits `show_int()` without ensuring it's declared
+
+Compiling a program that uses `str_of_int` (e.g. inside `contrib/json`'s
+`parse_json`) but never uses `show` fails at `clang` with
+`call to undeclared function 'show_int'`. The `show_int` runtime helper is
+only emitted when `show` is used; `str_of_int` lowers to the same call but
+doesn't trigger the helper's declaration. Works when the program also uses
+`show` (mq does, so it's not blocked).
+
+**Signal (upstream):** `str_of_int` should pull in the `show_int` helper
+(set the same gating flag `show` does).
