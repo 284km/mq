@@ -65,7 +65,15 @@ should first check whether the name is locally bound (shadowed) before
 treating it as the builtin — the interpreter and typer already respect
 shadowing.
 
-## P3 🟡 contrib/json parser & writer don't share a type — can't compose
+## P3 🟢 contrib/json parser & writer don't share a type (fixed upstream)
+
+**Fixed (mere `31b4c45`):** the serialiser (`to_json_str` /
+`to_pretty_str`) was merged into `module Json` (and `writer.mere` deleted),
+so it operates on the same `Json.json` the parser produces —
+`Json.to_pretty_str (Json.parse_json s)` now type-checks. (mq keeps its own
+compact serialiser for now; it can switch to `Json.to_json_str` when its
+deps pin a mere rev that includes this.)
+
 
 `contrib/json/json.mere` defines the parser inside `module Json` (so its
 type is `Json.json`); `contrib/json/writer.mere` defines a **top-level**
