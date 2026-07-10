@@ -129,3 +129,13 @@ comparison instead.
 **Signal (upstream):** let the typer accept `<`/`<=`/`>`/`>=` on str
 (lexicographic, backed by the existing strcmp paths), or document that
 string ordering must go through `ord` / a `str_cmp` helper.
+
+## (M3) 🟢 positive: stream redesign hit no language friction
+
+Generalising the query engine from `json -> json` to a stream model
+(`json -> json list`, flat-mapped per selector, with `.[]` exploding one
+value into many and `|` sequencing) was written in Mere with no friction:
+the `sel` ADT gained an `Iter` case, and `step` / `run` / `concat` are
+plain recursion. Like the CRDT in mere-notes, functional stream/AST code
+is where Mere is comfortable — the pains so far are all at the edges
+(native I/O, contrib packaging, str/Unicode), not in the core language.

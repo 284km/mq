@@ -1,22 +1,28 @@
 // mq — a jq-like JSON query & transform CLI, compiled to a NATIVE binary
 // via the Mere C backend (mere -c | clang). Second dogfood app (PAIN.md).
 //
-// M2: path queries.  mq '<query>' <file.json>
+// M3: streams — pipes and array/object iteration.
+//   mq '<query>' <file.json>
 //   .              identity
 //   .a.b           field access
 //   .items[0]      array index
-//   .[1].name      index then field
+//   .[]            iterate: array elements / object values (one per line)
+//   .items[] | .id   pipe: for each item, take .id
 //
-//   echo not-supported-yet;  mq '.user.name' data.json   → "alice"
+// A query is a flat sequence of selectors (Field | Index | Iter); `|` and
+// spaces just separate them (`.a | .b` ≡ `.a.b`). Evaluation is
+// stream-based: it starts with [input] and flat-maps each selector, so
+// `.[]` turns one value into many. Each result value is printed on its
+// own line.
 //
 // Build:
 //   mere install
 //   mere -c main.mere > mq.c && clang mq.c -o mq
-//   ./mq '.user.name' data.json
+//   ./mq '.items[] | .id' data.json
 
 import "json/json.mere";
 
-type sel = Field of str | Index of int;
+type sel = Field of str | Index of int | Iter;
 
 let rec nth_or = fn xs -> fn i -> fn d ->
   match xs with
@@ -24,10 +30,8 @@ let rec nth_or = fn xs -> fn i -> fn d ->
   | Cons (x, t) -> if i <= 0 then x else nth_or t (i - 1) d;
 
 // --- query parsing: string → sel list -----------------------------------
+// `ord`-based char classes (`>=`/`<=` don't typecheck on str — PAIN P7).
 
-// Classify by code point via `ord` + int comparison. `>=`/`<=` don't
-// typecheck on str (comparison operators default to int — see PAIN P7),
-// so char-range tests go through ord.
 let is_dig = fn c -> let o = ord c in o >= 48 && o <= 57;
 let is_id  = fn c ->
   let o = ord c in
@@ -45,22 +49,27 @@ let rec parse_q = fn q -> fn i -> fn n ->
   if i >= n then Nil
   else
     let c = char_at q i in
-    if c == "." then
-      (if i + 1 >= n then Nil                       // trailing "." = identity
-       else if char_at q (i + 1) == "[" then parse_idx q (i + 1) n
+    if c == " " || c == "|" then parse_q q (i + 1) n        // skip separators
+    else if c == "." then
+      (if i + 1 >= n then Nil                               // trailing "." = identity
+       else if char_at q (i + 1) == "[" then parse_bracket q (i + 1) n
        else parse_fld q (i + 1) n)
-    else if c == "[" then parse_idx q i n
-    else Nil
+    else if c == "[" then parse_bracket q i n
+    else Nil                                                // unknown → stop
 and parse_fld = fn q -> fn i -> fn n ->
   let j = scan_ident q i n in
-  Cons (Field (substring q i j), parse_q q j n)
-and parse_idx = fn q -> fn i -> fn n ->
-  match scan_int q (i + 1) n 0 with
-  | (num, j) ->
-    let j2 = if j < n && char_at q j == "]" then j + 1 else j in
-    Cons (Index num, parse_q q j2 n);
+  if j == i then parse_q q i n                              // no ident here → resume
+  else Cons (Field (substring q i j), parse_q q j n)
+and parse_bracket = fn q -> fn i -> fn n ->                 // q[i] == '['
+  if i + 1 < n && char_at q (i + 1) == "]" then
+    Cons (Iter, parse_q q (i + 2) n)                        // []
+  else
+    match scan_int q (i + 1) n 0 with
+    | (num, j) ->
+      let j2 = if j < n && char_at q j == "]" then j + 1 else j in
+      Cons (Index num, parse_q q j2 n);
 
-// --- applying a query to a Json.json value ------------------------------
+// --- navigating a Json.json value ---------------------------------------
 
 let rec obj_get = fn ps -> fn k ->
   match ps with
@@ -72,17 +81,47 @@ let rec arr_get = fn xs -> fn idx ->
   | Nil -> Json.JNull
   | Cons (x, t) -> if idx <= 0 then x else arr_get t (idx - 1);
 
-let rec apply = fn v -> fn sels ->
+let rec vals_of = fn ps ->
+  match ps with
+  | Nil -> Nil
+  | Cons ((k, v), t) -> Cons (v, vals_of t);
+
+let field_of = fn v -> fn k ->
+  match v with
+  | Json.JObj ps -> obj_get ps k
+  | _ -> Json.JNull;
+
+let index_of = fn v -> fn idx ->
+  match v with
+  | Json.JArr xs -> arr_get xs idx
+  | _ -> Json.JNull;
+
+let iter_of = fn v ->
+  match v with
+  | Json.JArr xs -> xs
+  | Json.JObj ps -> vals_of ps
+  | _ -> Nil;
+
+// --- stream evaluation --------------------------------------------------
+
+let rec concat = fn a -> fn b ->
+  match a with
+  | Nil -> b
+  | Cons (x, t) -> Cons (x, concat t b);
+
+let rec step = fn stream -> fn s ->
+  match stream with
+  | Nil -> Nil
+  | Cons (v, t) ->
+    (match s with
+     | Field k -> Cons (field_of v k, step t s)
+     | Index i -> Cons (index_of v i, step t s)
+     | Iter    -> concat (iter_of v) (step t s));
+
+let rec run = fn stream -> fn sels ->
   match sels with
-  | Nil -> v
-  | Cons (Field k, t) ->
-    (match v with
-     | Json.JObj ps -> apply (obj_get ps k) t
-     | _ -> Json.JNull)
-  | Cons (Index i, t) ->
-    (match v with
-     | Json.JArr xs -> apply (arr_get xs i) t
-     | _ -> Json.JNull);
+  | Nil -> stream
+  | Cons (s, t) -> run (step stream s) t;
 
 // --- serialising a Json.json value --------------------------------------
 
@@ -105,6 +144,11 @@ and ser_obj = fn ps ->
   | Cons ((k, v), Nil) -> "\"" ++ k ++ "\":" ++ ser v
   | Cons ((k, v), t) -> "\"" ++ k ++ "\":" ++ ser v ++ "," ++ ser_obj t;
 
+let rec print_each = fn xs ->
+  match xs with
+  | Nil -> ()
+  | Cons (v, t) -> let _ = print (ser v) in print_each t;
+
 // --- main ---------------------------------------------------------------
 
 let a = args () in
@@ -116,5 +160,5 @@ else
   let src = read_file path in
   let v = Json.parse_json src in
   let sels = parse_q query 0 (str_len query) in
-  let _ = print (ser (apply v sels)) in
+  let _ = print_each (run (Cons (v, Nil)) sels) in
   0

@@ -29,7 +29,9 @@ mq --csv '.[] | .price' sales.csv                              # CSV in
 2. ✅ **Path queries** ← latest: `.`, `.a.b`, `.items[0]`, `.[1].name` —
    a tiny recursive-descent query parser (ADT `sel = Field | Index`) over
    the parsed `Json.json`; absent paths give `null`.
-3. **Pipes & filters**: `.a | .b`, array iteration `.[]`, `select`.
+3. ✅ **Streams** ← latest: array/object iteration `.[]` and pipes
+   `.items[] | .id`. Evaluation is stream-based (`json -> json list`,
+   flat-mapped per selector); each result prints on its own line.
 4. **CSV**: `--csv` input/output via `contrib/csv`, bridging JSON↔CSV.
 5. **Distribution**: how a user gets the `mq` binary (build via `mere -c`
    + clang; a release workflow / `mere install`-assisted build) — a
