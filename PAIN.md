@@ -114,3 +114,18 @@ Wasm backend, so this is a 4-backend parity gap.
 **Signal (upstream):** either add a `str_eq` direct-call case to the C
 backend (→ `strcmp == 0`, like the `==`-on-str path already does) or
 document `==` as the portable string-equality idiom.
+
+## P7 🟡 `>=` / `<=` don't typecheck on str (comparison ops default to int)
+
+Writing char-range tests as `c >= "0" && c <= "9"` failed: `type error:
+expected 'int', got 'str'` — the ordering operators are typed int-only, so
+`c` was forced to int and the str literal `"0"` clashed. (`==` / `!=` do
+work on str, and the C backend even has `strcmp`-based `<`/`<=`/`>`/`>=`
+for str operands — so the gap is in the typer, not codegen.)
+
+**Worked around:** classify characters via `ord c` (byte value) + int
+comparison instead.
+
+**Signal (upstream):** let the typer accept `<`/`<=`/`>`/`>=` on str
+(lexicographic, backed by the existing strcmp paths), or document that
+string ordering must go through `ord` / a `str_cmp` helper.

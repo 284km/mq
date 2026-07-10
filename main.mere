@@ -1,27 +1,91 @@
 // mq — a jq-like JSON query & transform CLI, compiled to a NATIVE binary
-// via the Mere C backend (mere -c | clang). Second dogfood app (see
-// PAIN.md). This milestone (M1): read a JSON file argument, parse it, and
-// print it back — the identity query `.`. A formatter, and proof that a
-// real argument-driven native CLI works end to end.
+// via the Mere C backend (mere -c | clang). Second dogfood app (PAIN.md).
 //
-//   mq data.json          # parse + reprint
+// M2: path queries.  mq '<query>' <file.json>
+//   .              identity
+//   .a.b           field access
+//   .items[0]      array index
+//   .[1].name      index then field
+//
+//   echo not-supported-yet;  mq '.user.name' data.json   → "alice"
 //
 // Build:
 //   mere install
 //   mere -c main.mere > mq.c && clang mq.c -o mq
-//   ./mq data.json
+//   ./mq '.user.name' data.json
 
 import "json/json.mere";
 
-let rec head_or = fn (xs: str list) -> fn (d: str) ->
+type sel = Field of str | Index of int;
+
+let rec nth_or = fn xs -> fn i -> fn d ->
   match xs with
   | Nil -> d
-  | Cons (x, _) -> x;
+  | Cons (x, t) -> if i <= 0 then x else nth_or t (i - 1) d;
 
-// Serialize a Json.json compactly. (contrib/json/writer.mere has a
-// pretty-printer, but its `json` type is top-level while the parser's is
-// `Json.json` inside `module Json`, so they don't compose — see PAIN P3.
-// Hand-rolling the serializer over Json.json sidesteps that for now.)
+// --- query parsing: string → sel list -----------------------------------
+
+// Classify by code point via `ord` + int comparison. `>=`/`<=` don't
+// typecheck on str (comparison operators default to int — see PAIN P7),
+// so char-range tests go through ord.
+let is_dig = fn c -> let o = ord c in o >= 48 && o <= 57;
+let is_id  = fn c ->
+  let o = ord c in
+  (o >= 97 && o <= 122) || (o >= 65 && o <= 90) || (o >= 48 && o <= 57) || o == 95;
+
+let rec scan_ident = fn q -> fn i -> fn n ->
+  if i < n && is_id (char_at q i) then scan_ident q (i + 1) n else i;
+
+let rec scan_int = fn q -> fn i -> fn n -> fn acc ->
+  if i < n && is_dig (char_at q i) then
+    scan_int q (i + 1) n (acc * 10 + (ord (char_at q i) - 48))
+  else (acc, i);
+
+let rec parse_q = fn q -> fn i -> fn n ->
+  if i >= n then Nil
+  else
+    let c = char_at q i in
+    if c == "." then
+      (if i + 1 >= n then Nil                       // trailing "." = identity
+       else if char_at q (i + 1) == "[" then parse_idx q (i + 1) n
+       else parse_fld q (i + 1) n)
+    else if c == "[" then parse_idx q i n
+    else Nil
+and parse_fld = fn q -> fn i -> fn n ->
+  let j = scan_ident q i n in
+  Cons (Field (substring q i j), parse_q q j n)
+and parse_idx = fn q -> fn i -> fn n ->
+  match scan_int q (i + 1) n 0 with
+  | (num, j) ->
+    let j2 = if j < n && char_at q j == "]" then j + 1 else j in
+    Cons (Index num, parse_q q j2 n);
+
+// --- applying a query to a Json.json value ------------------------------
+
+let rec obj_get = fn ps -> fn k ->
+  match ps with
+  | Nil -> Json.JNull
+  | Cons ((k2, v), t) -> if k2 == k then v else obj_get t k;
+
+let rec arr_get = fn xs -> fn idx ->
+  match xs with
+  | Nil -> Json.JNull
+  | Cons (x, t) -> if idx <= 0 then x else arr_get t (idx - 1);
+
+let rec apply = fn v -> fn sels ->
+  match sels with
+  | Nil -> v
+  | Cons (Field k, t) ->
+    (match v with
+     | Json.JObj ps -> apply (obj_get ps k) t
+     | _ -> Json.JNull)
+  | Cons (Index i, t) ->
+    (match v with
+     | Json.JArr xs -> apply (arr_get xs i) t
+     | _ -> Json.JNull);
+
+// --- serialising a Json.json value --------------------------------------
+
 let rec ser = fn v ->
   match v with
   | Json.JNull -> "null"
@@ -41,12 +105,16 @@ and ser_obj = fn ps ->
   | Cons ((k, v), Nil) -> "\"" ++ k ++ "\":" ++ ser v
   | Cons ((k, v), t) -> "\"" ++ k ++ "\":" ++ ser v ++ "," ++ ser_obj t;
 
+// --- main ---------------------------------------------------------------
+
 let a = args () in
-let path = head_or a "" in
+let query = nth_or a 0 "" in
+let path  = nth_or a 1 "" in
 if path == "" then
-  let _ = print "usage: mq <file.json>" in 1
+  let _ = print "usage: mq '<query>' <file.json>" in 1
 else
   let src = read_file path in
   let v = Json.parse_json src in
-  let _ = print (ser v) in
+  let sels = parse_q query 0 (str_len query) in
+  let _ = print (ser (apply v sels)) in
   0

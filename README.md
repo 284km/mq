@@ -21,14 +21,14 @@ mq --csv '.[] | .price' sales.csv                              # CSV in
 
 ## Milestones
 
-0. **Native CLI I/O** (upstream Mere). The C/LLVM backends don't implement
-   `args` / `read_line` (stdin) / `exit` — a native Mere program can't
-   read argv or stdin yet (PAIN P1). Add them to the C backend runtime so
-   Mere can be a native CLI at all.
-1. **Skeleton**: read JSON from stdin or a file arg, pretty-print it back
-   (the identity query `.`), exit 0/1. Native binary end to end.
-2. **Path queries**: `.field`, `.a.b`, `.[i]` — parse the query (a tiny
-   ADT/recursive-descent parser, Mere's strength) and apply to the value.
+0. ✅ **Native CLI I/O** (upstream Mere). Added `args()` (argv → str list)
+   to the C backend so a native Mere program can read arguments (PAIN P1).
+   stdin (read-all) and `exit` remain.
+1. ✅ **Skeleton**: read a JSON file arg, parse, and print it back (the
+   identity query `.`). Native binary end to end via `mere -c | clang`.
+2. ✅ **Path queries** ← latest: `.`, `.a.b`, `.items[0]`, `.[1].name` —
+   a tiny recursive-descent query parser (ADT `sel = Field | Index`) over
+   the parsed `Json.json`; absent paths give `null`.
 3. **Pipes & filters**: `.a | .b`, array iteration `.[]`, `select`.
 4. **CSV**: `--csv` input/output via `contrib/csv`, bridging JSON↔CSV.
 5. **Distribution**: how a user gets the `mq` binary (build via `mere -c`
