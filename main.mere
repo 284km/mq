@@ -195,10 +195,12 @@ let a = args () in
 let is_csv = (nth_or a 0 "") == "--csv" in
 let query = if is_csv then nth_or a 1 "" else nth_or a 0 "" in
 let path  = if is_csv then nth_or a 2 "" else nth_or a 1 "" in
-if path == "" then
-  let _ = print "usage: mq [--csv] '<query>' <file>" in 1
+if query == "" then
+  let _ = print "usage: mq [--csv] '<query>' [file]   (reads stdin if no file)" in 1
 else
-  let src = read_file path in
+  // Read the file argument, or all of stdin when no file is given —
+  // the usual `echo … | mq '.query'` pipeline.
+  let src = if path == "" then read_stdin () else read_file path in
   let v = if is_csv then csv_to_json (Csv.parse_csv src)
           else Json.parse_json src in
   let sels = parse_q query 0 (str_len query) in

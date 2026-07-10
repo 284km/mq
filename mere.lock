@@ -4,12 +4,12 @@
 name = "csv"
 git = "https://github.com/merelang/mere"
 subdir = "contrib/csv"
-rev = "0643f000f07b61cd40d871a7b0ea5401a2e55c1a"
+rev = "abdd7b3a4f220bbf5391d127b38f5db32d9df706"
 hash = "md5:6f25eda6d0ee49e22ee47a8ec86b6bf6"
 
 [[package]]
 name = "json"
 git = "https://github.com/merelang/mere"
 subdir = "contrib/json"
-rev = "0643f000f07b61cd40d871a7b0ea5401a2e55c1a"
-hash = "md5:7307ea0841f7d6ddb3c1f51d6e803730"
+rev = "abdd7b3a4f220bbf5391d127b38f5db32d9df706"
+hash = "md5:f999d409d1b41af8778d7584871e1c4c"

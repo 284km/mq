@@ -14,9 +14,10 @@ codes, stderr), and **native binary distribution**. See [PAIN.md](./PAIN.md)
 ## Goal
 
 ```sh
-mq '.user.name' data.json          # → "alice"
-mq '.items[]' data.json            # stream array elements
-mq --csv '.[] | .name' people.csv  # query CSV as JSON
+mq '.user.name' data.json               # → "alice"
+echo '{"xs":[1,2,3]}' | mq '.xs[]'       # read stdin; stream array elements
+mq --csv '.[] | .name' people.csv        # query CSV as JSON
+cat people.csv | mq --csv '.[0].city'    # CSV from stdin too
 ```
 
 ## Install
@@ -63,10 +64,12 @@ clang` produces native `mq` binaries (macOS arm64 / Linux x86_64) on each
    engine. Uses `contrib/csv` (proper quoted-field handling). Composing
    csv + json first broke the C backend's inner-fn lifting (PAIN P8) — now
    fixed upstream, so mq imports contrib/csv directly.
-5. ✅ **Distribution** ← latest: prebuilt binaries (macOS arm64 / Linux
-   x86_64) on each `v*` tag + a `curl | sh` installer. CI builds the Mere
-   compiler from source at a pinned commit, then `mere install` +
-   `mere -c | clang`. Released as **v0.0.1**.
+5. ✅ **Distribution**: prebuilt binaries (macOS arm64 / Linux x86_64) on
+   each `v*` tag + a `curl | sh` installer. CI installs a prebuilt `mere`
+   (v0.1.1+) then `mere install` + `mere -c | clang`. Released as **v0.0.1**.
+6. ✅ **stdin** ← latest: `echo '…' | mq '.query'` (and `--csv`) reads all
+   of stdin when no file argument is given — the usual jq pipeline. Needed
+   a `read_stdin` builtin, added upstream in mere v0.1.2.
 
 ## Dependencies
 
