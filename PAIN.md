@@ -144,7 +144,7 @@ plain recursion. Like the CRDT in mere-notes, functional stream/AST code
 is where Mere is comfortable — the pains so far are all at the edges
 (native I/O, contrib packaging, str/Unicode), not in the core language.
 
-## P8 🔴 C backend breaks inner-fn lifting when two modules are composed
+## P8 🟢 C backend broke inner-fn lifting when two modules are composed (fixed upstream)
 
 The sharpest finding of M4. Importing **both** `json/json.mere` and
 `csv/parser.mere` and parsing a JSON array fails to compile: a lifted
@@ -160,15 +160,22 @@ inner-lifted recursive loops corrupts the C backend's capture analysis
 (the `__lifted_loop_N` numbering / captured-var set isn't isolated per
 module). A real limitation on composing contrib libraries in native builds.
 
-**Worked around:** don't import `contrib/csv`; parse CSV inline with a
-tiny `str_split`-based reader (top-level recursion only, no inner-lifted
-loops), so only `json` is imported. (Cost: no quoted-field / embedded-comma
-handling.)
+**Root cause (found upstream):** not naming — the transitive-capture
+fixpoint resolved inner-fn names via a *global* last-write map. Two hosts
+with a same-named inner fn (json's `loop` and csv's `loop`) collided, so
+json's recursive `loop` self-call resolved to csv's lifted fn and json's
+loop inherited csv's `n` capture — a variable undeclared at json's call
+sites.
 
-**Signal (upstream):** inner-fn lifting must give each lifted function a
-program-unique name and carry its full captured-variable set regardless of
-how many modules are linked. This blocks composing inner-lift-heavy contrib
-modules on the C backend.
+**Fixed (mere `27fbfca`):** the fixpoint now resolves inner-fn names per
+host (`inner_lifts_by_host[l_host]`), keeping same-named inner fns
+isolated. Minimal repro (two top-level fns each with a `loop`, one
+capturing an extra var) added as a regression test.
+
+**Follow-through:** the milestone-4 `str_split` workaround is gone — `mq`
+now imports `contrib/csv` directly and gets real quoted-field / embedded-
+comma parsing (`"hello, world"` → one field). The fix is validated in the
+app.
 
 ## P9 🟡 `str_of_int` emits `show_int()` without ensuring it's declared
 

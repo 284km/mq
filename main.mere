@@ -21,13 +21,13 @@
 //   ./mq '.items[] | .id' data.json
 
 import "json/json.mere";
+import "csv/parser.mere";
 
-// NOTE: contrib/csv/parser.mere is NOT imported. Composing it with
-// json.mere breaks the C backend's inner-function lifting (a captured
-// `n` is dropped from a lifted loop — see PAIN P8). Until that's fixed
-// upstream, mq parses CSV with a small str_split-based reader below
-// (top-level recursion only, no inner-lifted loops). Trade-off: no
-// quoted-field / embedded-comma handling yet.
+// CSV is parsed with contrib/csv (proper quoted-field handling). This
+// used to break: composing csv + json miscompiled the C backend's
+// inner-fn lifting (PAIN P8), so an earlier milestone used a str_split
+// reader instead. P8 is now fixed upstream (mere 27fbfca), so mq uses
+// contrib/csv directly.
 
 type sel = Field of str | Index of int | Iter;
 
@@ -188,14 +188,6 @@ let csv_to_json = fn rows ->
   | Nil -> Json.JArr Nil
   | Cons (hdr, data) -> Json.JArr (rows_to_objs hdr data);
 
-// Minimal CSV reader: split on newlines, then each line on commas.
-// (No quoted-field support — see the note at the top / PAIN P8.)
-let rec split_lines = fn lines ->
-  match lines with
-  | Nil -> Nil
-  | Cons (l, t) -> Cons (str_split l ",", split_lines t);
-
-let csv_rows = fn src -> split_lines (str_split src "\n");
 
 // --- main ---------------------------------------------------------------
 
@@ -207,7 +199,7 @@ if path == "" then
   let _ = print "usage: mq [--csv] '<query>' <file>" in 1
 else
   let src = read_file path in
-  let v = if is_csv then csv_to_json (csv_rows src)
+  let v = if is_csv then csv_to_json (Csv.parse_csv src)
           else Json.parse_json src in
   let sels = parse_q query 0 (str_len query) in
   let _ = print_each (run (Cons (v, Nil)) sels) in

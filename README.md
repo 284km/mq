@@ -34,9 +34,9 @@ mq --csv '.[] | .price' sales.csv                              # CSV in
    flat-mapped per selector); each result prints on its own line.
 4. ✅ **CSV input** ← latest: `mq --csv '<query>' <file.csv>` turns CSV
    into a JSON array of objects (header row → keys) and queries it with the
-   same engine. Parsed with an inline `str_split` reader, not `contrib/csv`
-   — composing csv + json broke the C backend's inner-fn lifting (PAIN P8);
-   trade-off: no quoted-field handling yet.
+   same engine. Uses `contrib/csv` (proper quoted-field handling). Composing
+   csv + json first broke the C backend's inner-fn lifting (PAIN P8) — now
+   fixed upstream, so mq imports contrib/csv directly.
 5. **Distribution**: how a user gets the `mq` binary (build via `mere -c`
    + clang; a release workflow / `mere install`-assisted build) — a
    different story from mere-notes' `mere serve`.
