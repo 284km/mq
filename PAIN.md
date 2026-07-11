@@ -10,7 +10,7 @@ Status legend: 🔴 open · 🟡 worked around · 🟢 fixed upstream
 
 ---
 
-## P1 🟡 Native backends can't do CLI I/O (argv done; stdin / exit remain)
+## P1 🟢 Native CLI I/O (argv + stdin + exit — all fixed upstream)
 
 The whole point of a CLI: read arguments and stdin. In the interpreter,
 `args ()` (argv), `read_line ()` (stdin), and `exit n` all work. But
@@ -44,10 +44,13 @@ reads all of stdin (interp + C backend), so `echo … | mq '.query'` works —
 `mq` falls back to `read_stdin ()` when given no file argument (`--csv`
 included). Verified native end-to-end through the release binary.
 
-**Still open:** **`exit n`** — the C backend has no case for it, and
-`exit`'s `'a` (bottom) result is awkward as a C expression; `mq` returns
-its code from `main` for now. LLVM still rejects `args` outright
-("Phase 5.1 MVP"), so `mq` builds via the C backend only.
+**`exit n` fixed (mere v0.1.7):** the C backend now emits libc `exit(n)`
+(noreturn) followed by a default value of the expected type, so `exit`'s
+`'a` (bottom) result type-checks as an unreachable C expression — the same
+shape as `fail`. A native CLI can now set its process exit code mid-program
+instead of only returning it from `main`. Verified native: `exit 3` → exit
+code 3. LLVM still rejects `args` outright ("Phase 5.1 MVP"), so `mq`
+builds via the C backend only.
 
 ## P2 🟢 C backend ignored shadowing of the `join` builtin (fixed upstream)
 
