@@ -1,0 +1,66 @@
+name: CI
+
+# WHY THIS EXISTS. This repository had a release workflow and nothing that
+# tested what it released. merelang/mere's CI checks that its `main` still
+# COMPILES this code (test/downstream/REPOS), but "does it build" and "does it
+# answer what jq answers" are different questions.
+#
+# The gate it runs is a differential, not a recording: jq exists, so the
+# expected values come from a different program written by other people rather
+# than from a previous run of mq. A gate whose answers came from its own
+# subject can catch a change but never a mistake -- and writing it found two:
+# mq printed its main's return value as a line of output (so `mq '.x' |
+# next-tool` was fed a digit that is not JSON) and always exited 0 (so
+# `mq ... || handle` never fired).
+
+on:
+  push:
+  pull_request:
+  # The compiler moves daily and this repository does not, so a weekly run
+  # catches the case where nothing here changed and it broke anyway.
+  schedule:
+    - cron: "0 3 * * 1"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # BUILT FROM main, NOT FROM THE LATEST RELEASE -- this repository is
+      # developed against the compiler as it is. release.yml is the one that
+      # uses a published mere, because that is what a user's build does.
+      - name: Check out the Mere compiler
+        uses: actions/checkout@v5
+        with:
+          repository: merelang/mere
+          path: .mere-compiler
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "5.1"
+
+      - name: Build mere
+        run: |
+          cd .mere-compiler
+          opam install . --deps-only
+          opam exec -- dune build bin/mere.exe
+
+      # The oracle. verify.sh skips loudly without it rather than passing: a
+      # differential with no oracle is not a weaker test, it is not a test.
+      - name: jq (the oracle)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          jq --version
+
+      # `mere install` fetches json and csv into .mere_modules/ per mere.toml.
+      - name: Fetch dependencies
+        run: .mere-compiler/_build/default/bin/mere.exe install
+
+      # MEASURED before wiring it: 23 checks, under a second after the build.
+      - name: verify.sh — mq against jq
+        run: MERE="$GITHUB_WORKSPACE/.mere-compiler/_build/default/bin/mere.exe" CC=clang sh verify.sh

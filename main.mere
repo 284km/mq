@@ -196,7 +196,12 @@ let is_csv = (nth_or a 0 "") == "--csv" in
 let query = if is_csv then nth_or a 1 "" else nth_or a 0 "" in
 let path  = if is_csv then nth_or a 2 "" else nth_or a 1 "" in
 if query == "" then
-  let _ = print "usage: mq [--csv] '<query>' [file]   (reads stdin if no file)" in 1
+  // `exit`, not a returned int: a Mere program's main value is PRINTED, so
+  // returning 1 here put the digit on stdout and still exited 0 -- a caller's
+  // `mq ... || handle` never fired, and `mq '.x' | next-tool` was fed a line
+  // that is not JSON. mgrep and mk end with `exit` for the same reason.
+  let _ = print "usage: mq [--csv] '<query>' [file]   (reads stdin if no file)" in
+  exit 1
 else
   // Read the file argument, or all of stdin when no file is given —
   // the usual `echo … | mq '.query'` pipeline.
@@ -205,4 +210,4 @@ else
           else Json.parse_json src in
   let sels = parse_q query 0 (str_len query) in
   let _ = print_each (run (Cons (v, Nil)) sels) in
-  0
+  exit 0
